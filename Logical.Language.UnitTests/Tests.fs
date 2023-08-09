@@ -1,6 +1,6 @@
 namespace Logical.Language.UnitTests
 
-open Logical.Language.Lang
+open Logical.Language.Compiler
 open Microsoft.VisualStudio.TestTools.UnitTesting
 open System
 
@@ -24,6 +24,11 @@ type TestClass() =
             let tagged = tag currTag term
             let detagged = detag tagged
             let tagof = tagOf tagged
-            printf "%A %A %A %A %A\n" term currTag tagged detagged tagof
             Assert.AreEqual(term, detagged)
             Assert.AreEqual(currTag, tagof)
+
+    [<TestMethod>]
+    member this.TestParse() =
+        let code = "a if b else 1000"
+        printfn "%A" (parse code)
+        Assert.AreEqual(1, 1)
