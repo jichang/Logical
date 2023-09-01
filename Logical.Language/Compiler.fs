@@ -1,8 +1,6 @@
 namespace Logical.Language
 
 module Compiler =
-    open System.Text.RegularExpressions
-
     type Tag =
         | FirstOccurrence = 0 // V
         | RepeatOccurrence = 1 // U
@@ -10,6 +8,19 @@ module Compiler =
         | SymbolIndex = 3 // C
         | SmallInteger = 4 // N
         | Arity = 5 // A
+
+    type IntArray = int32 array
+    type IntList = int32 list
+    type IntStack = int32 array
+
+    type Cardinal = int32
+
+    type Refernces = Map<string, IntStack>
+
+    let at (refs: Refernces) (key: string) =
+        match Map.tryFind key refs with
+        | Some value -> value
+        | None -> [||]
 
     let mask = 0b111
 
@@ -27,9 +38,7 @@ module Compiler =
         | Keyword of string
         | Dot
 
-    let parse (code: string) =
-        let regex = Regex(@"^(\s+)|(\.)|([a-z]\w)|([A-Z_]\w)|(-?\d+)$")
-        regex.Matches code
+    let tokenize = ignore
 
     type Clause =
         { addr: int // the base of the heap where the cells for the clause start
@@ -37,3 +46,12 @@ module Compiler =
           neck: int // the length of the head and thus the offset where the first body element starts (or the end of the clause if none)
           gs: int array // the toplevel skeleton of a clause containing references to the location of its head and then body elements
           xs: int array } // the index vector containing dereferenced constants, numbers or array sizes as extracted from the outermost term of the head of the clause, with 0 values marking variable positions
+
+    type Spine =
+        { head: int
+          baseAddr: int
+          gs: int
+          trailTop: int
+          k: int
+          cs: int[]
+          xs: int[] }

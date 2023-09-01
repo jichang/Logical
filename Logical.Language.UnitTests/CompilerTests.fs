@@ -5,7 +5,7 @@ open Microsoft.VisualStudio.TestTools.UnitTesting
 open System
 
 [<TestClass>]
-type TestClass() =
+type TestCompilerClass() =
 
     [<TestMethod>]
     member this.TestTagging() =
@@ -26,9 +26,3 @@ type TestClass() =
             let tagof = tagOf tagged
             Assert.AreEqual(term, detagged)
             Assert.AreEqual(currTag, tagof)
-
-    [<TestMethod>]
-    member this.TestParse() =
-        let code = "a if b else 1000"
-        printfn "%A" (parse code)
-        Assert.AreEqual(1, 1)
