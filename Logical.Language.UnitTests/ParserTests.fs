@@ -88,3 +88,33 @@ type TestParserClass() =
             )
 
         Assert.AreEqual(expected, result)
+
+    [<TestMethod>]
+    member this.TestMultipleExpr() =
+        let stream =
+            { code = "(a (b c d) 3)\n(a b c d)"
+              offset = 0 }
+
+        let result = parse [] stream
+        printf "%A" result
+
+        let expected: Result<Expr list * Stream, ParserError> =
+            Ok(
+                [ { atoms =
+                      [| Symbol { value = "a"; offset = 1 }
+                         Expr
+                             { atoms =
+                                 [| Symbol { value = "b"; offset = 4 }
+                                    Symbol { value = "c"; offset = 6 }
+                                    Symbol { value = "d"; offset = 8 } |] }
+                         Symbol { value = "3"; offset = 11 } |] }
+                  { atoms =
+                      [| Symbol { value = "a"; offset = 15 }
+                         Symbol { value = "b"; offset = 17 }
+                         Symbol { value = "c"; offset = 19 }
+                         Symbol { value = "d"; offset = 21 } |] } ],
+                { code = "(a (b c d) 3)\n(a b c d)"
+                  offset = 23 }
+            )
+
+        Assert.AreEqual(expected, result)

@@ -101,6 +101,7 @@ module rec Parser =
                 | ')'
                 | ' '
                 | '\t'
+                | '\r'
                 | '\n' -> Ok(chars, stream)
                 | _ -> collect (Array.append chars [| c |]) (forward stream 1)
             | None -> Ok(chars, stream)
@@ -147,6 +148,7 @@ module rec Parser =
                 | ')' -> Ok(atoms, forward stream 1)
                 | ' '
                 | '\t'
+                | '\r'
                 | '\n' -> collect atoms (forward stream 1)
                 | _ ->
                     match parseAtom stream with
@@ -179,6 +181,22 @@ module rec Parser =
                   actual = None }
 
     let rec parse (exprs: Expr list) (stream: Stream) =
-        match parseExpr stream with
-        | Ok(expr, stream) -> parse (List.append exprs [ expr ]) stream
-        | Error error -> Error error
+        let head = peek stream
+
+        match head with
+        | Some c ->
+            match c with
+            | '(' ->
+                match parseExpr stream with
+                | Ok(expr, stream) -> parse (List.append exprs [ expr ]) stream
+                | Error error -> Error error
+            | ' '
+            | '\t'
+            | '\r'
+            | '\n' -> parse exprs (forward stream 1)
+            | _ ->
+                Error
+                    { offset = stream.offset
+                      expected = [| '(' |]
+                      actual = None }
+        | None -> Ok(exprs, stream)
