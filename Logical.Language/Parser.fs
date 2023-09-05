@@ -3,10 +3,11 @@ namespace Logical.Language
 module rec Parser =
     type Token = { value: string; offset: int }
 
-    type Expr = { atoms: Atom list }
+    type Expr = { atoms: Atom array }
 
     and Atom =
-        | Token of Token
+        | Symbol of Token
+        | Literal of Token
         | Expr of Expr
 
     type ParserError =
@@ -31,7 +32,7 @@ module rec Parser =
         { stream with
             offset = stream.offset + len }
 
-    let collectString (stream: Stream) =
+    let parseLiteral (stream: Stream) =
         let rec collect chars stream =
             let head = peek stream
 
@@ -52,7 +53,7 @@ module rec Parser =
                         | '\v'
                         | '\''
                         | '\"'
-                        | '\\' -> collect (Array.append chars [| escape |]) (forward stream 2)
+                        | '\\' -> collect (Array.append chars [| c; escape |]) (forward stream 2)
                         | _ ->
                             Error
                                 { offset = stream.offset + 1
@@ -70,17 +71,15 @@ module rec Parser =
                       expected = [| '\"' |]
                       actual = None }
 
-        match collect [||] stream with
-        | Ok chars -> Ok(string chars, stream)
-        | Error error -> Error error
-
-    let parseString (stream: Stream) =
         let head = peek stream
 
         match head with
         | Some c ->
             match c with
-            | '\"' -> collectString (forward stream 1)
+            | '\"' ->
+                match collect [||] (forward stream 1) with
+                | Ok(chars, stream) -> Ok(new System.String(chars), stream)
+                | Error error -> Error error
             | _ ->
                 Error
                     { offset = stream.offset
@@ -91,6 +90,24 @@ module rec Parser =
                 { offset = stream.offset
                   expected = [| '\"' |]
                   actual = None }
+
+    let parseSymbol (stream: Stream) =
+        let rec collect chars stream =
+            let head = peek stream
+
+            match head with
+            | Some c ->
+                match c with
+                | ')'
+                | ' '
+                | '\t'
+                | '\n' -> Ok(chars, stream)
+                | _ -> collect (Array.append chars [| c |]) (forward stream 1)
+            | None -> Ok(chars, stream)
+
+        match collect [||] stream with
+        | Ok(chars, stream) -> Ok(new System.String(chars), stream)
+        | Error error -> Error error
 
     let parseAtom (stream: Stream) =
         let head = peek stream
@@ -103,14 +120,17 @@ module rec Parser =
                 | Ok(expr, stream) -> Ok(Expr expr, stream)
                 | Error error -> Error error
             | '\"' ->
-                match parseString stream with
-                | Ok(str, stream) -> Ok(Token { value = str; offset = 0 }, stream)
+                let offset = stream.offset
+
+                match parseLiteral stream with
+                | Ok(str, stream) -> Ok(Literal { value = str; offset = offset }, stream)
                 | Error error -> Error error
             | _ ->
-                Error
-                    { offset = stream.offset
-                      expected = [| '(' |]
-                      actual = None }
+                let offset = stream.offset
+
+                match parseSymbol stream with
+                | Ok(str, stream) -> Ok(Symbol { value = str; offset = offset }, stream)
+                | Error error -> Error error
         | None ->
             Error
                 { offset = stream.offset
@@ -118,12 +138,35 @@ module rec Parser =
                   actual = None }
 
     let rec parseExpr (stream: Stream) =
+        let rec collect (atoms: Atom array) (stream: Stream) =
+            let head = peek stream
+
+            match head with
+            | Some c ->
+                match c with
+                | ')' -> Ok(atoms, forward stream 1)
+                | ' '
+                | '\t'
+                | '\n' -> collect atoms (forward stream 1)
+                | _ ->
+                    match parseAtom stream with
+                    | Ok(atom, stream) -> collect (Array.append atoms [| atom |]) stream
+                    | Error error -> Error error
+            | None ->
+                Error
+                    { offset = stream.offset
+                      expected = [| ')' |]
+                      actual = None }
+
         let head = peek stream
 
         match head with
         | Some c ->
             match c with
-            | '(' -> Ok({ atoms = [] }, forward stream 1)
+            | '(' ->
+                match collect [||] (forward stream 1) with
+                | Ok(atoms, stream) -> Ok({ atoms = atoms }, stream)
+                | Error error -> Error error
             | _ ->
                 Error
                     { offset = stream.offset
