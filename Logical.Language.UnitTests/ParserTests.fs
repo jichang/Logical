@@ -96,7 +96,6 @@ type TestParserClass() =
               offset = 0 }
 
         let result = parse [] stream
-        printf "%A" result
 
         let expected: Result<Expr list * Stream, ParserError> =
             Ok(

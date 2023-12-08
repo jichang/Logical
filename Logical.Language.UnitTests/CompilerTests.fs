@@ -18,7 +18,7 @@ type TestCompilerClass() =
                Tag.Reference
                Tag.SymbolIndex
                Tag.SmallInteger
-               Tag.Arity |]
+               Tag.TermArity |]
 
         for currTag in allTags do
             let tagged = tag currTag term
