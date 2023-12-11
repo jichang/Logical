@@ -39,7 +39,7 @@ type TestCompilerClass() =
 
             match result with
             | Ok program ->
-                CollectionAssert.AreEqual([| 13; 3 |], program.cells)
+                CollectionAssert.AreEqual([| 5; 3 |], program.cells)
                 CollectionAssert.AreEqual([| "a" |], program.symbols)
                 Assert.AreEqual(1, program.clauses.Count)
 
@@ -65,7 +65,7 @@ type TestCompilerClass() =
 
             match result with
             | Ok program ->
-                CollectionAssert.AreEqual([| 13; 3 |], program.cells)
+                CollectionAssert.AreEqual([| 5; 3 |], program.cells)
                 CollectionAssert.AreEqual([| "A" |], program.symbols)
                 Assert.AreEqual(1, program.clauses.Count)
 
@@ -76,6 +76,58 @@ type TestCompilerClass() =
                          hgs = [| 0 |]
                          xs = [||] } |],
                     program.clauses["A/0"]
+                )
+            | Error error -> Assert.Fail $"should compile code correctly: {error.code}"
+        | _ -> Assert.Fail "should parse code correctly"
+
+    [<TestMethod>]
+    member this.TestCompileFactWithVariable() =
+        let stream = { code = "(male X)"; offset = 0 }
+        let result = parseExpr stream
+
+        match result with
+        | Ok(expr, _) ->
+            let result = compileExpr Program.empty expr
+
+            match result with
+            | Ok program ->
+                CollectionAssert.AreEqual([| 13; 3; 16 |], program.cells)
+                CollectionAssert.AreEqual([| "male" |], program.symbols)
+                Assert.AreEqual(1, program.clauses.Count)
+
+                CollectionAssert.AreEqual(
+                    [| { addr = 0
+                         len = 3
+                         neck = 3
+                         hgs = [| 0 |]
+                         xs = [||] } |],
+                    program.clauses["male/1"]
+                )
+            | Error error -> Assert.Fail $"should compile code correctly: {error.code}"
+        | _ -> Assert.Fail "should parse code correctly"
+
+    [<TestMethod>]
+    member this.TestCompileFactWithIdentifier() =
+        let stream = { code = "(male x)"; offset = 0 }
+        let result = parseExpr stream
+
+        match result with
+        | Ok(expr, _) ->
+            let result = compileExpr Program.empty expr
+
+            match result with
+            | Ok program ->
+                CollectionAssert.AreEqual([| 13; 3; 11 |], program.cells)
+                CollectionAssert.AreEqual([| "male"; "x" |], program.symbols)
+                Assert.AreEqual(1, program.clauses.Count)
+
+                CollectionAssert.AreEqual(
+                    [| { addr = 0
+                         len = 3
+                         neck = 3
+                         hgs = [| 0 |]
+                         xs = [||] } |],
+                    program.clauses["male/1"]
                 )
             | Error error -> Assert.Fail $"should compile code correctly: {error.code}"
         | _ -> Assert.Fail "should parse code correctly"

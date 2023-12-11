@@ -9,11 +9,19 @@ For example
 ```lisp
 (true)
 
-// fact that a is b's parent
-(parent (a b))
-// fact that b is c's parent
-(parent (b c))
+// fact that a is male
+(male a)
+// fact that b is female
+(female b)
 
-// X is Y's grandparent when X is Z's parent and Z is Y's parent
-(grandparent (X Y) ((parent (X Z) (parent (Z Y)))))
+// fact that a is c's father
+(father (a c))
+// fact that b is c's mother
+(mother (b c))
+
+// rule that A is B's parent if A is B's father or A is B's mother
+(parent (A B) (or (father (A B)) (mother (A B))))
+
+// rule that A and A are couple if A is C's father and B is C's mother
+(couple (A B) (and (father (A C)) (mother (B C))))
 ```

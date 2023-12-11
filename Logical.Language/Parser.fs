@@ -1,13 +1,15 @@
 namespace Logical.Language
 
 module rec Parser =
+    open System
+
     type Token = { value: string; offset: int }
 
     type Expr = { atoms: Atom array }
 
     and Atom =
-        | Symbol of Token
-        | Literal of Token
+        | Identifier of Token
+        | Variable of Token
         | Expr of Expr
 
     type ParserError =
@@ -21,6 +23,8 @@ module rec Parser =
         | None -> printf $"expected {error.expected}, but found empty at offset {error.offset}"
 
     type Stream = { code: string; offset: int }
+
+    let isVariable (str: string) = Char.IsUpper str.[0]
 
     let peek (stream: Stream) =
         if stream.code.Length > stream.offset then
@@ -124,13 +128,17 @@ module rec Parser =
                 let offset = stream.offset
 
                 match parseLiteral stream with
-                | Ok(str, stream) -> Ok(Literal { value = str; offset = offset }, stream)
+                | Ok(str, stream) -> Ok(Identifier { value = str; offset = offset }, stream)
                 | Error error -> Error error
             | _ ->
                 let offset = stream.offset
 
                 match parseSymbol stream with
-                | Ok(str, stream) -> Ok(Symbol { value = str; offset = offset }, stream)
+                | Ok(str, stream) ->
+                    if isVariable str then
+                        Ok(Variable { value = str; offset = offset }, stream)
+                    else
+                        Ok(Identifier { value = str; offset = offset }, stream)
                 | Error error -> Error error
         | None ->
             Error

@@ -32,38 +32,38 @@ type TestParserClass() =
         let result = parseAtom stream
 
         let expected: Result<Atom * Stream, ParserError> =
-            Ok(Literal { value = "\\\""; offset = 0 }, { code = "\"\\\"\""; offset = 4 })
+            Ok(Identifier { value = "\\\""; offset = 0 }, { code = "\"\\\"\""; offset = 4 })
 
         Assert.AreEqual(expected, result)
 
     [<TestMethod>]
     member this.TestExpr() =
-        let stream = { code = "(a b c)"; offset = 0 }
+        let stream = { code = "(A b c)"; offset = 0 }
         let result = parseExpr stream
 
         let expected: Result<Expr * Stream, ParserError> =
             Ok(
                 { atoms =
-                    [| Symbol { value = "a"; offset = 1 }
-                       Symbol { value = "b"; offset = 3 }
-                       Symbol { value = "c"; offset = 5 } |] },
-                { code = "(a b c)"; offset = 7 }
+                    [| Variable { value = "A"; offset = 1 }
+                       Identifier { value = "b"; offset = 3 }
+                       Identifier { value = "c"; offset = 5 } |] },
+                { code = "(A b c)"; offset = 7 }
             )
 
         Assert.AreEqual(expected, result)
 
     [<TestMethod>]
     member this.TestLiteralExpr() =
-        let stream = { code = "(\"a\" \"b\" c)"; offset = 0 }
+        let stream = { code = "(\"A\" \"b\" c)"; offset = 0 }
         let result = parseExpr stream
 
         let expected: Result<Expr * Stream, ParserError> =
             Ok(
                 { atoms =
-                    [| Literal { value = "a"; offset = 1 }
-                       Literal { value = "b"; offset = 5 }
-                       Symbol { value = "c"; offset = 9 } |] },
-                { code = "(\"a\" \"b\" c)"
+                    [| Identifier { value = "A"; offset = 1 }
+                       Identifier { value = "b"; offset = 5 }
+                       Identifier { value = "c"; offset = 9 } |] },
+                { code = "(\"A\" \"b\" c)"
                   offset = 11 }
             )
 
@@ -71,20 +71,20 @@ type TestParserClass() =
 
     [<TestMethod>]
     member this.TestNestedExpr() =
-        let stream = { code = "(a (b c d) 3)"; offset = 0 }
+        let stream = { code = "(a (B c d) 3)"; offset = 0 }
         let result = parseExpr stream
 
         let expected: Result<Expr * Stream, ParserError> =
             Ok(
                 { atoms =
-                    [| Symbol { value = "a"; offset = 1 }
+                    [| Identifier { value = "a"; offset = 1 }
                        Expr
                            { atoms =
-                               [| Symbol { value = "b"; offset = 4 }
-                                  Symbol { value = "c"; offset = 6 }
-                                  Symbol { value = "d"; offset = 8 } |] }
-                       Symbol { value = "3"; offset = 11 } |] },
-                { code = "(a (b c d) 3)"; offset = 13 }
+                               [| Variable { value = "B"; offset = 4 }
+                                  Identifier { value = "c"; offset = 6 }
+                                  Identifier { value = "d"; offset = 8 } |] }
+                       Identifier { value = "3"; offset = 11 } |] },
+                { code = "(a (B c d) 3)"; offset = 13 }
             )
 
         Assert.AreEqual(expected, result)
@@ -92,7 +92,7 @@ type TestParserClass() =
     [<TestMethod>]
     member this.TestMultipleExpr() =
         let stream =
-            { code = "(a (b c d) 3)\n(a b c d)"
+            { code = "(a (B c d) 3)\n(a B c d)"
               offset = 0 }
 
         let result = parse [] stream
@@ -100,19 +100,19 @@ type TestParserClass() =
         let expected: Result<Expr list * Stream, ParserError> =
             Ok(
                 [ { atoms =
-                      [| Symbol { value = "a"; offset = 1 }
+                      [| Identifier { value = "a"; offset = 1 }
                          Expr
                              { atoms =
-                                 [| Symbol { value = "b"; offset = 4 }
-                                    Symbol { value = "c"; offset = 6 }
-                                    Symbol { value = "d"; offset = 8 } |] }
-                         Symbol { value = "3"; offset = 11 } |] }
+                                 [| Variable { value = "B"; offset = 4 }
+                                    Identifier { value = "c"; offset = 6 }
+                                    Identifier { value = "d"; offset = 8 } |] }
+                         Identifier { value = "3"; offset = 11 } |] }
                   { atoms =
-                      [| Symbol { value = "a"; offset = 15 }
-                         Symbol { value = "b"; offset = 17 }
-                         Symbol { value = "c"; offset = 19 }
-                         Symbol { value = "d"; offset = 21 } |] } ],
-                { code = "(a (b c d) 3)\n(a b c d)"
+                      [| Identifier { value = "a"; offset = 15 }
+                         Variable { value = "B"; offset = 17 }
+                         Identifier { value = "c"; offset = 19 }
+                         Identifier { value = "d"; offset = 21 } |] } ],
+                { code = "(a (B c d) 3)\n(a B c d)"
                   offset = 23 }
             )
 

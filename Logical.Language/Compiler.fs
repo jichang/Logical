@@ -20,18 +20,6 @@ module Compiler =
 
     let tagOf (word: int) : Tag = enum<Tag> (word &&& mask)
 
-    type Token =
-        | Whitespace of string
-        | Variable of string
-        | Number of string
-        | Atom of string
-        | Keyword of string
-        | Dot
-
-    type Symbol =
-        | Str of string
-        | Int of int
-
     // Representation of a clause
     type Clause =
         { addr: int // the base of the heap where the cells for the clause start
@@ -62,7 +50,7 @@ module Compiler =
         | WrongFormat = 1
         | NullOrEmptyTerm = 2
         | ComplexTermAsRelation = 3
-        | VariableAsFact = 4
+        | VariableAsFunctor = 4
 
     type CompilerError =
         { expr: Expr option
@@ -72,23 +60,31 @@ module Compiler =
 
     let equalTo (t1: 'a) = fun (t2: 'a) -> t1 = t2
 
-    let extractAtomName (atom: Atom) =
+    let extractFunctorName (atom: Atom) =
         match atom with
-        | Literal token ->
+        | Variable _ -> Error CompilerErrorCode.VariableAsFunctor
+        | Identifier token ->
             if String.IsNullOrEmpty token.value then
                 Error CompilerErrorCode.NullOrEmptyTerm
             else
                 Ok token.value
-        | Symbol token ->
-            if String.IsNullOrEmpty token.value then
-                Error CompilerErrorCode.NullOrEmptyTerm
-            else if isVariable token.value then
-                Error CompilerErrorCode.VariableAsFact
-            else
-                Ok token.value
-        | Expr expr -> Error CompilerErrorCode.ComplexTermAsRelation
+        | Expr _ -> Error CompilerErrorCode.ComplexTermAsRelation
 
-    let clauseKey (clauseName: string) (clauseArity: int) = $"{clauseName}/{clauseArity}"
+    let clauseKey (functorName: string) (functorArity: int) = $"{functorName}/{functorArity}"
+
+    let updateClauses (functorName: string) (functorArity: int) (clause: Clause) (clauses: Map<string, Clause array>) =
+        Map.change
+            (clauseKey functorName functorArity)
+            (fun matchedClauses ->
+                match matchedClauses with
+                | Some clauses -> Some(Array.append clauses [| clause |])
+                | None -> Some [| clause |])
+            clauses
+
+    let updateSymbols (symbol: string) (symbols: string array) =
+        match Array.tryFindIndex (equalTo symbol) symbols with
+        | Some index -> symbols
+        | None -> Array.append symbols [| symbol |]
 
     let compileExpr (program: Program) (expr: Expr) =
         let len = expr.atoms.Length
@@ -96,11 +92,10 @@ module Compiler =
         if len = 0 then
             Ok program
         else if len = 1 then
-            let arityCell = tag Tag.TermArity 1
-            let atom = expr.atoms.[0]
+            let functor = expr.atoms.[0]
 
-            match extractAtomName atom with
-            | Ok clauseName ->
+            match extractFunctorName functor with
+            | Ok functorName ->
                 let addr = program.cells.Length
 
                 let clause =
@@ -110,52 +105,107 @@ module Compiler =
                       hgs = [| addr |]
                       xs = [||] }
 
-                let clauses =
-                    Map.change
-                        (clauseKey clauseName 0)
-                        (fun matchedClauses ->
-                            match matchedClauses with
-                            | Some clauses -> Some(Array.append clauses [| clause |])
-                            | None -> Some [| clause |])
-                        program.clauses
+                let functorArity = 0
 
-                let symbols = Array.append program.symbols [| clauseName |]
+                let clauses = updateClauses functorName functorArity clause program.clauses
 
-                match Array.tryFindIndex (equalTo clauseName) program.symbols with
-                | Some index ->
-                    let headCell = tag Tag.SymbolIndex index
+                let symbols = updateSymbols functorName program.symbols
 
-                    Ok
-                        { program with
-                            cells = Array.append program.cells [| arityCell; headCell |]
-                            clauses = clauses
-                            symbols = symbols }
-                | None ->
-                    let headCell = tag Tag.SymbolIndex program.symbols.Length
+                let arityCell = tag Tag.TermArity functorArity
 
-                    Ok
-                        { program with
-                            cells = Array.append program.cells [| arityCell; headCell |]
-                            clauses = clauses
-                            symbols = symbols }
-            | Error code -> Error { code = code; expr = Some expr }
-        else if len = 2 then
-            let arityCell = tag Tag.TermArity 2
-            let atom = expr.atoms.[0]
+                let functorCell =
+                    Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
 
-            match extractAtomName atom with
-            | Ok clauseName ->
-                let addr = program.cells.Length
+                let cells = Array.append program.cells [| arityCell; functorCell |]
 
                 Ok
                     { program with
-                        cells = Array.append program.cells [| arityCell |] }
+                        cells = cells
+                        clauses = clauses
+                        symbols = symbols }
+            | Error code -> Error { code = code; expr = Some expr }
+        else if len = 2 then
+            let functor = expr.atoms.[0]
+
+            match extractFunctorName functor with
+            | Ok functorName ->
+                let addr = program.cells.Length
+
+                let args = expr.atoms.[1]
+
+                match args with
+                | Variable argToken ->
+                    let functorArity = 1
+                    let arityCell = tag Tag.TermArity functorArity
+
+                    let symbols = updateSymbols functorName program.symbols
+
+                    let functorCell =
+                        Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
+
+                    let argCell = tag Tag.FirstOccurrence (addr + 2)
+
+                    let clause =
+                        { addr = addr
+                          len = 3
+                          neck = 3
+                          hgs = [| addr |]
+                          xs = [||] }
+
+                    let clauses = updateClauses functorName functorArity clause program.clauses
+
+                    Ok
+                        { program with
+                            cells = Array.append program.cells [| arityCell; functorCell; argCell |]
+                            clauses = clauses
+                            symbols = symbols }
+                | Identifier arg ->
+                    let functorArity = 1
+                    let arityCell = tag Tag.TermArity functorArity
+
+                    let symbols = updateSymbols functorName program.symbols |> updateSymbols arg.value
+
+                    let functorCell =
+                        Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
+
+                    let argCell = Array.findIndex (equalTo arg.value) symbols |> tag Tag.SymbolIndex
+
+                    let clause =
+                        { addr = addr
+                          len = 3
+                          neck = 3
+                          hgs = [| addr |]
+                          xs = [||] }
+
+                    let clauses = updateClauses functorName functorArity clause program.clauses
+
+                    let cells = Array.append program.cells [| arityCell; functorCell; argCell |]
+
+                    Ok
+                        { program with
+                            cells = cells
+                            clauses = clauses
+                            symbols = symbols }
+                | Expr args ->
+                    let functorArity = args.atoms.Length
+                    let arityCell = tag Tag.TermArity functorArity
+
+                    let symbols = updateSymbols functorName program.symbols
+
+                    let functorCell =
+                        Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
+
+                    let variableCell = tag Tag.FirstOccurrence (addr + 2)
+
+                    Ok
+                        { program with
+                            cells = Array.append program.cells [| arityCell |] }
             | Error code -> Error { code = code; expr = Some expr }
         else if len = 3 then
             let arityCells = tag Tag.TermArity 3
             let atom = expr.atoms.[0]
 
-            match extractAtomName atom with
+            match extractFunctorName atom with
             | Ok clauseName ->
                 Ok
                     { program with
