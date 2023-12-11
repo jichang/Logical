@@ -72,6 +72,24 @@ module Compiler =
 
     let equalTo (t1: 'a) = fun (t2: 'a) -> t1 = t2
 
+    let extractAtomName (atom: Atom) =
+        match atom with
+        | Literal token ->
+            if String.IsNullOrEmpty token.value then
+                Error CompilerErrorCode.NullOrEmptyTerm
+            else
+                Ok token.value
+        | Symbol token ->
+            if String.IsNullOrEmpty token.value then
+                Error CompilerErrorCode.NullOrEmptyTerm
+            else if isVariable token.value then
+                Error CompilerErrorCode.VariableAsFact
+            else
+                Ok token.value
+        | Expr expr -> Error CompilerErrorCode.ComplexTermAsRelation
+
+    let clauseKey (clauseName: string) (clauseArity: int) = $"{clauseName}/{clauseArity}"
+
     let compileExpr (program: Program) (expr: Expr) =
         let len = expr.atoms.Length
 
@@ -79,45 +97,22 @@ module Compiler =
             Ok program
         else if len = 1 then
             let arityCell = tag Tag.TermArity 1
-            let term = expr.atoms.[0]
+            let atom = expr.atoms.[0]
 
-            let clauseAtom =
-                match term with
-                | Literal token ->
-                    if String.IsNullOrEmpty token.value then
-                        Error
-                            { expr = Some expr
-                              code = CompilerErrorCode.NullOrEmptyTerm }
-                    else
-                        Ok token.value
-                | Symbol token ->
-                    if String.IsNullOrEmpty token.value then
-                        Error
-                            { expr = Some expr
-                              code = CompilerErrorCode.NullOrEmptyTerm }
-                    else if isVariable token.value then
-                        Error
-                            { expr = Some expr
-                              code = CompilerErrorCode.VariableAsFact }
-                    else
-                        Ok token.value
-                | Expr expr ->
-                    Error
-                        { expr = Some expr
-                          code = CompilerErrorCode.ComplexTermAsRelation }
-
-            match clauseAtom with
+            match extractAtomName atom with
             | Ok clauseName ->
+                let addr = program.cells.Length
+
                 let clause =
-                    { addr = program.cells.Length
+                    { addr = addr
                       len = 2
                       neck = 2
-                      hgs = [| program.cells.Length |]
+                      hgs = [| addr |]
                       xs = [||] }
 
                 let clauses =
                     Map.change
-                        clauseName
+                        (clauseKey clauseName 0)
                         (fun matchedClauses ->
                             match matchedClauses with
                             | Some clauses -> Some(Array.append clauses [| clause |])
@@ -143,19 +138,29 @@ module Compiler =
                             cells = Array.append program.cells [| arityCell; headCell |]
                             clauses = clauses
                             symbols = symbols }
-            | Error error -> Error error
+            | Error code -> Error { code = code; expr = Some expr }
         else if len = 2 then
-            let arityCells = tag Tag.TermArity 2
+            let arityCell = tag Tag.TermArity 2
+            let atom = expr.atoms.[0]
 
-            Ok
-                { program with
-                    cells = Array.append program.cells [| arityCells |] }
+            match extractAtomName atom with
+            | Ok clauseName ->
+                let addr = program.cells.Length
+
+                Ok
+                    { program with
+                        cells = Array.append program.cells [| arityCell |] }
+            | Error code -> Error { code = code; expr = Some expr }
         else if len = 3 then
             let arityCells = tag Tag.TermArity 3
+            let atom = expr.atoms.[0]
 
-            Ok
-                { program with
-                    cells = Array.append program.cells [| arityCells |] }
+            match extractAtomName atom with
+            | Ok clauseName ->
+                Ok
+                    { program with
+                        cells = Array.append program.cells [| arityCells |] }
+            | Error code -> Error { code = code; expr = Some expr }
         else
             Error
                 { expr = Some expr

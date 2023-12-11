@@ -49,7 +49,7 @@ type TestCompilerClass() =
                          neck = 2
                          hgs = [| 0 |]
                          xs = [||] } |],
-                    program.clauses["a"]
+                    program.clauses["a/0"]
                 )
             | Error error -> Assert.Fail $"should compile code correctly: {error.code}"
         | _ -> Assert.Fail "should parse code correctly"
@@ -75,7 +75,7 @@ type TestCompilerClass() =
                          neck = 2
                          hgs = [| 0 |]
                          xs = [||] } |],
-                    program.clauses["A"]
+                    program.clauses["A/0"]
                 )
             | Error error -> Assert.Fail $"should compile code correctly: {error.code}"
         | _ -> Assert.Fail "should parse code correctly"
