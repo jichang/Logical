@@ -7,6 +7,8 @@ The implementation of langauge is based on this [paper](http://www.cse.unt.edu/~
 For example
 
 ```lisp
+(true)
+
 // fact that a is b's parent
 (parent (a b))
 // fact that b is c's parent

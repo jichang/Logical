@@ -2,6 +2,7 @@ namespace Logical.Language
 
 module Compiler =
     open Parser
+    open System
 
     type Tag =
         | FirstOccurrence = 0 // V
@@ -47,41 +48,123 @@ module Compiler =
               xs = Array.empty }
 
     type Program =
-        { instructions: int array
+        { cells: int array
           symbols: string array
-          clauses: Map<string, Clause> }
+          clauses: Map<string, Clause array> }
 
         static member empty =
-            { instructions = Array.empty
+            { cells = Array.empty
               symbols = Array.empty
               clauses = Map.empty }
 
+    type CompilerErrorCode =
+        | Unknown = 0
+        | WrongFormat = 1
+        | NullOrEmptyTerm = 2
+        | ComplexTermAsRelation = 3
+        | VariableAsFact = 4
+
+    type CompilerError =
+        { expr: Expr option
+          code: CompilerErrorCode }
+
+    let isVariable (str: string) = Char.IsUpper str.[0]
+
+    let equalTo (t1: 'a) = fun (t2: 'a) -> t1 = t2
+
     let compileExpr (program: Program) (expr: Expr) =
         let len = expr.atoms.Length
+
         if len = 0 then
             Ok program
         else if len = 1 then
-            let arityInstruction = tag Tag.TermArity 0
-            let symbol =
-                match expr.atoms.[0] with
-                | Symbol token ->
-                    Error ""
+            let arityCell = tag Tag.TermArity 1
+            let term = expr.atoms.[0]
+
+            let clauseAtom =
+                match term with
                 | Literal token ->
-                    Ok program
+                    if String.IsNullOrEmpty token.value then
+                        Error
+                            { expr = Some expr
+                              code = CompilerErrorCode.NullOrEmptyTerm }
+                    else
+                        Ok token.value
+                | Symbol token ->
+                    if String.IsNullOrEmpty token.value then
+                        Error
+                            { expr = Some expr
+                              code = CompilerErrorCode.NullOrEmptyTerm }
+                    else if isVariable token.value then
+                        Error
+                            { expr = Some expr
+                              code = CompilerErrorCode.VariableAsFact }
+                    else
+                        Ok token.value
                 | Expr expr ->
-                    Error ""
-            Ok { program with instructions = Array.append program.instructions [| arityInstruction |] }
+                    Error
+                        { expr = Some expr
+                          code = CompilerErrorCode.ComplexTermAsRelation }
+
+            match clauseAtom with
+            | Ok clauseName ->
+                let clause =
+                    { addr = program.cells.Length
+                      len = 2
+                      neck = 2
+                      hgs = [| program.cells.Length |]
+                      xs = [||] }
+
+                let clauses =
+                    Map.change
+                        clauseName
+                        (fun matchedClauses ->
+                            match matchedClauses with
+                            | Some clauses -> Some(Array.append clauses [| clause |])
+                            | None -> Some [| clause |])
+                        program.clauses
+
+                let symbols = Array.append program.symbols [| clauseName |]
+
+                match Array.tryFindIndex (equalTo clauseName) program.symbols with
+                | Some index ->
+                    let headCell = tag Tag.SymbolIndex index
+
+                    Ok
+                        { program with
+                            cells = Array.append program.cells [| arityCell; headCell |]
+                            clauses = clauses
+                            symbols = symbols }
+                | None ->
+                    let headCell = tag Tag.SymbolIndex program.symbols.Length
+
+                    Ok
+                        { program with
+                            cells = Array.append program.cells [| arityCell; headCell |]
+                            clauses = clauses
+                            symbols = symbols }
+            | Error error -> Error error
         else if len = 2 then
-            let arityInstruction = tag Tag.TermArity 1
-            Ok { program with instructions = Array.append program.instructions [| arityInstruction |] }
+            let arityCells = tag Tag.TermArity 2
+
+            Ok
+                { program with
+                    cells = Array.append program.cells [| arityCells |] }
+        else if len = 3 then
+            let arityCells = tag Tag.TermArity 3
+
+            Ok
+                { program with
+                    cells = Array.append program.cells [| arityCells |] }
         else
-            let rel = expr.atoms.[0]
-            let args = expr.atoms.[1..len-2]
-            let body = expr.atoms.[len - 1]
-            Ok program
+            Error
+                { expr = Some expr
+                  code = CompilerErrorCode.WrongFormat }
 
     let compile (exprs: List<Expr>) =
         let code =
-            { instructions = Array.empty; clauses = Map.empty; symbols = Array.empty  }
+            { cells = Array.empty
+              clauses = Map.empty
+              symbols = Array.empty }
 
         code
