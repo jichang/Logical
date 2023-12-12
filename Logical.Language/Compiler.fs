@@ -88,6 +88,7 @@ module Compiler =
 
     let compileExpr (program: Program) (expr: Expr) =
         let len = expr.atoms.Length
+        let addr = program.cells.Length
 
         if len = 0 then
             Ok program
@@ -96,7 +97,6 @@ module Compiler =
 
             match extractFunctorName functor with
             | Ok functorName ->
-                let addr = program.cells.Length
 
                 let clause =
                     { addr = addr
@@ -129,8 +129,6 @@ module Compiler =
 
             match extractFunctorName functor with
             | Ok functorName ->
-                let addr = program.cells.Length
-
                 let args = expr.atoms.[1]
 
                 match args with
@@ -153,10 +151,11 @@ module Compiler =
                           xs = [||] }
 
                     let clauses = updateClauses functorName functorArity clause program.clauses
+                    let cells = Array.append program.cells [| arityCell; functorCell; argCell |]
 
                     Ok
                         { program with
-                            cells = Array.append program.cells [| arityCell; functorCell; argCell |]
+                            cells = cells
                             clauses = clauses
                             symbols = symbols }
                 | Identifier arg ->
@@ -190,16 +189,58 @@ module Compiler =
                     let functorArity = args.atoms.Length
                     let arityCell = tag Tag.TermArity functorArity
 
-                    let symbols = updateSymbols functorName program.symbols
+                    let mutable symbols = updateSymbols functorName program.symbols
 
                     let functorCell =
                         Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
 
-                    let variableCell = tag Tag.FirstOccurrence (addr + 2)
+                    let argsCount = args.atoms.Length
+                    let argCells = Array.create argsCount 0
+                    let argAddrStart = addr + 2
+                    let mutable argBodyStart = addr + argsCount
+
+                    let mutable variables = Map.empty
+
+                    for i in 0 .. args.atoms.Length - 1 do
+                        let arg = args.atoms.[i]
+                        let argAddr = argAddrStart + i
+
+                        match arg with
+                        | Variable token ->
+                            let argCell =
+                                match Map.tryFind token.value variables with
+                                | Some position -> tag Tag.RepeatOccurrence position
+                                | None ->
+                                    variables <- Map.add token.value argAddr variables
+                                    tag Tag.FirstOccurrence argAddr
+
+                            Array.set argCells i argCell
+                        | Identifier token ->
+                            symbols <- updateSymbols token.value symbols
+                            let argCell = Array.findIndex (equalTo token.value) symbols |> tag Tag.SymbolIndex
+
+                            Array.set argCells i argCell
+                        | Expr expr ->
+                            let argCell = tag Tag.Reference argBodyStart
+                            printfn "%A" i
+
+                    let clause =
+                        { addr = addr
+                          len = 3
+                          neck = 3
+                          hgs = [| addr |]
+                          xs = [||] }
+
+                    let clauses = updateClauses functorName functorArity clause program.clauses
+
+                    let cells =
+                        Array.append [| arityCell; functorCell |] argCells |> Array.append program.cells
 
                     Ok
                         { program with
-                            cells = Array.append program.cells [| arityCell |] }
+                            cells = cells
+                            symbols = symbols
+                            clauses = clauses }
             | Error code -> Error { code = code; expr = Some expr }
         else if len = 3 then
             let arityCells = tag Tag.TermArity 3

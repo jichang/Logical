@@ -24,4 +24,5 @@ For example
 
 // rule that A and A are couple if A is C's father and B is C's mother
 (couple (A B) (and (father (A C)) (mother (B C))))
+(couple ((father (A C)) (mother (B C))))
 ```

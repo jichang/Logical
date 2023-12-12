@@ -4,6 +4,7 @@ open Logical.Language.Parser
 open Logical.Language.Compiler
 open Microsoft.VisualStudio.TestTools.UnitTesting
 open System
+open Logical.Language.Debugger
 
 [<TestClass>]
 type TestCompilerClass() =
@@ -128,6 +129,32 @@ type TestCompilerClass() =
                          hgs = [| 0 |]
                          xs = [||] } |],
                     program.clauses["male/1"]
+                )
+            | Error error -> Assert.Fail $"should compile code correctly: {error.code}"
+        | _ -> Assert.Fail "should parse code correctly"
+
+    [<TestMethod>]
+    member this.TestCompileFactWithMultipleArgs() =
+        let stream = { code = "(mother (x X))"; offset = 0 }
+        let result = parseExpr stream
+
+        match result with
+        | Ok(expr, _) ->
+            let result = compileExpr Program.empty expr
+
+            match result with
+            | Ok program ->
+                CollectionAssert.AreEqual([| 21; 3; 11; 24 |], program.cells)
+                CollectionAssert.AreEqual([| "mother"; "x" |], program.symbols)
+                Assert.AreEqual(1, program.clauses.Count)
+
+                CollectionAssert.AreEqual(
+                    [| { addr = 0
+                         len = 3
+                         neck = 3
+                         hgs = [| 0 |]
+                         xs = [||] } |],
+                    program.clauses["mother/2"]
                 )
             | Error error -> Assert.Fail $"should compile code correctly: {error.code}"
         | _ -> Assert.Fail "should parse code correctly"
