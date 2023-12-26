@@ -7,6 +7,7 @@ The implementation of langauge is based on this [paper](http://www.cse.unt.edu/~
 For example
 
 ```lisp
+// assertion
 (true)
 
 // fact that a is male
