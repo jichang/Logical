@@ -5,12 +5,12 @@ module rec Compiler =
     open System
 
     type Tag =
-        | FirstOccurrence = 0 // V
-        | RepeatOccurrence = 1 // U
+        | Declare = 0 // V
+        | Use = 1 // U
         | Reference = 2 // R
-        | SymbolIndex = 3 // C
-        | SmallInteger = 4 // N
-        | TermArity = 5 // A
+        | Symbol = 3 // C
+        | Integer = 4 // N
+        | Arity = 5 // A
 
     let mask = 0b111
 
@@ -110,10 +110,9 @@ module rec Compiler =
 
             let symbols = updateSymbols functorName program.symbols
 
-            let arityCell = tag Tag.TermArity functorArity
+            let arityCell = tag Tag.Arity functorArity
 
-            let functorCell =
-                Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
+            let functorCell = Array.findIndex (equalTo functorName) symbols |> tag Tag.Symbol
 
             let cells = Array.append program.cells [| arityCell; functorCell |]
 
@@ -124,7 +123,9 @@ module rec Compiler =
                     symbols = symbols }
         | Error code -> Error { code = code; expr = Some expr }
 
-    let compileFact (program: Program) (expr: Expr) =
+    let compileFact (variables: Map<string, int>) (program: Program) (expr: Expr) =
+        assert (expr.atoms.Length = 2)
+
         let addr = program.cells.Length
         let functor = expr.atoms.[0]
 
@@ -135,14 +136,18 @@ module rec Compiler =
             match args with
             | Variable argToken ->
                 let functorArity = 1
-                let arityCell = tag Tag.TermArity functorArity
+                let arityCell = tag Tag.Arity functorArity
 
                 let symbols = updateSymbols functorName program.symbols
 
-                let functorCell =
-                    Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
+                let functorCell = Array.findIndex (equalTo functorName) symbols |> tag Tag.Symbol
 
-                let argCell = tag Tag.FirstOccurrence (addr + 2)
+                let (variables, argCell) =
+                    match Map.tryFind argToken.value variables with
+                    | Some position -> (variables, tag Tag.Use position)
+                    | None ->
+                        let position = addr + 2
+                        (variables, tag Tag.Declare position)
 
                 let clause =
                     { addr = addr
@@ -154,21 +159,22 @@ module rec Compiler =
                 let clauses = updateClauses functorName functorArity clause program.clauses
                 let cells = Array.append program.cells [| arityCell; functorCell; argCell |]
 
-                Ok
+                Ok(
+                    variables,
                     { program with
                         cells = cells
                         clauses = clauses
                         symbols = symbols }
+                )
             | Identifier arg ->
                 let functorArity = 1
-                let arityCell = tag Tag.TermArity functorArity
+                let arityCell = tag Tag.Arity functorArity
 
                 let symbols = updateSymbols functorName program.symbols |> updateSymbols arg.value
 
-                let functorCell =
-                    Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
+                let functorCell = Array.findIndex (equalTo functorName) symbols |> tag Tag.Symbol
 
-                let argCell = Array.findIndex (equalTo arg.value) symbols |> tag Tag.SymbolIndex
+                let argCell = Array.findIndex (equalTo arg.value) symbols |> tag Tag.Symbol
 
                 let clause =
                     { addr = addr
@@ -181,49 +187,24 @@ module rec Compiler =
 
                 let cells = Array.append program.cells [| arityCell; functorCell; argCell |]
 
-                Ok
+                Ok(
+                    variables,
                     { program with
                         cells = cells
                         clauses = clauses
                         symbols = symbols }
-            | Expr args ->
-                let functorArity = args.atoms.Length
-                let arityCell = tag Tag.TermArity functorArity
+                )
+            | Expr predictes ->
+                let functorArity = predictes.atoms.Length
+                let arityCell = tag Tag.Arity functorArity
 
-                let mutable symbols = updateSymbols functorName program.symbols
+                let symbols = updateSymbols functorName program.symbols
 
-                let functorCell =
-                    Array.findIndex (equalTo functorName) symbols |> tag Tag.SymbolIndex
+                let functorCell = Array.findIndex (equalTo functorName) symbols |> tag Tag.Symbol
 
-                let argsCount = args.atoms.Length
-                let argCells = Array.create argsCount 0
-                let argAddrStart = addr + 2
-                let mutable argBodyStart = argAddrStart + argsCount
-
-                let mutable variables = Map.empty
-
-                for i in 0 .. args.atoms.Length - 1 do
-                    let arg = args.atoms.[i]
-                    let argAddr = argAddrStart + i
-
-                    match arg with
-                    | Variable token ->
-                        let argCell =
-                            match Map.tryFind token.value variables with
-                            | Some position -> tag Tag.RepeatOccurrence position
-                            | None ->
-                                variables <- Map.add token.value argAddr variables
-                                tag Tag.FirstOccurrence argAddr
-
-                        Array.set argCells i argCell
-                    | Identifier token ->
-                        symbols <- updateSymbols token.value symbols
-                        let argCell = Array.findIndex (equalTo token.value) symbols |> tag Tag.SymbolIndex
-
-                        Array.set argCells i argCell
-                    | Expr expr ->
-                        let argCell = tag Tag.Reference argBodyStart
-                        Array.set argCells i argCell
+                let predicatesCount = predictes.atoms.Length
+                let predicateCells = Array.create predicatesCount 0
+                let predicateAddrStart = addr + 2
 
                 let clause =
                     { addr = addr
@@ -235,13 +216,47 @@ module rec Compiler =
                 let clauses = updateClauses functorName functorArity clause program.clauses
 
                 let cells =
-                    Array.append [| arityCell; functorCell |] argCells |> Array.append program.cells
+                    Array.append [| arityCell; functorCell |] predicateCells
+                    |> Array.append program.cells
 
-                Ok
+                let mutable predicateIndex = 0
+
+                let initialProgram =
                     { program with
                         cells = cells
                         symbols = symbols
                         clauses = clauses }
+
+                Array.fold
+                    (fun result arg ->
+                        match result with
+                        | Ok(variables, program) ->
+                            match arg with
+                            | Identifier token ->
+                                let symbols = updateSymbols functorName program.symbols |> updateSymbols token.value
+                                let argCell = Array.findIndex (equalTo token.value) symbols |> tag Tag.Symbol
+                                Array.set program.cells (predicateAddrStart + predicateIndex) argCell
+                                predicateIndex <- predicateIndex + 1
+                                Ok(variables, { program with symbols = symbols })
+                            | Variable token ->
+                                let (updatedVariables, argCell) =
+                                    match Map.tryFind token.value variables with
+                                    | Some position -> (variables, position |> tag Tag.Use)
+                                    | None ->
+                                        let position = predicateAddrStart + predicateIndex
+                                        (Map.add token.value position variables, position |> tag Tag.Declare)
+
+                                Array.set program.cells (predicateAddrStart + predicateIndex) argCell
+                                predicateIndex <- predicateIndex + 1
+                                Ok(updatedVariables, program)
+                            | Expr expr ->
+                                let argCell = tag Tag.Reference program.cells.Length
+                                Array.set program.cells (predicateAddrStart + predicateIndex) argCell
+                                predicateIndex <- predicateIndex + 1
+                                compileFact variables program expr
+                        | Error error -> Error error)
+                    (Ok(variables, initialProgram))
+                    predictes.atoms
         | Error code -> Error { code = code; expr = Some expr }
 
     let compileExpr (program: Program) (expr: Expr) =
@@ -252,9 +267,11 @@ module rec Compiler =
         else if len = 1 then
             compileAssertion program expr
         else if len = 2 then
-            compileFact program expr
+            match compileFact Map.empty program expr with
+            | Ok(_, program) -> Ok program
+            | Error error -> Error error
         else if len = 3 then
-            let arityCells = tag Tag.TermArity 3
+            let arityCells = tag Tag.Arity 3
             let atom = expr.atoms.[0]
 
             match extractFunctorName atom with

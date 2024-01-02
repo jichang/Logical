@@ -5,7 +5,7 @@ module Runtime =
 
     let isVar (word: int) =
         let tag = tagOf word
-        tag = Tag.FirstOccurrence || tag = Tag.RepeatOccurrence
+        tag = Tag.Declare || tag = Tag.Use
 
     let getRef (heap: int[]) (word: int) =
         let addr = detag word
@@ -21,7 +21,7 @@ module Runtime =
     let relocateAddr (offset: int) (addr: int) =
         let tag = tagOf addr
 
-        if tag = Tag.FirstOccurrence || tag = Tag.RepeatOccurrence || tag = Tag.Reference then
+        if tag = Tag.Declare || tag = Tag.Use || tag = Tag.Reference then
             addr + offset
         else
             addr

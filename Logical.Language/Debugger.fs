@@ -4,7 +4,7 @@ module Debugger =
     open Compiler
 
     let printCell (word: int) =
-        printfn "[%A]:%A" (tagOf word) (detag word)
+        printfn "%A [%A]:%A" word (tagOf word) (detag word)
 
     let printCells (cells: int array) =
         printfn "Cells"

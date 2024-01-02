@@ -15,12 +15,7 @@ type TestCompilerClass() =
         let term = rnd.Next(0, 100)
 
         let allTags =
-            [| Tag.FirstOccurrence
-               Tag.RepeatOccurrence
-               Tag.Reference
-               Tag.SymbolIndex
-               Tag.SmallInteger
-               Tag.TermArity |]
+            [| Tag.Declare; Tag.Use; Tag.Reference; Tag.Symbol; Tag.Integer; Tag.Arity |]
 
         for currTag in allTags do
             let tagged = tag currTag term
@@ -135,7 +130,10 @@ type TestCompilerClass() =
 
     [<TestMethod>]
     member this.TestCompileFactWithMultipleArgs() =
-        let stream = { code = "(mother (x X))"; offset = 0 }
+        let stream =
+            { code = "(mother (x X (s X)))"
+              offset = 0 }
+
         let result = parseExpr stream
 
         match result with
@@ -144,9 +142,10 @@ type TestCompilerClass() =
 
             match result with
             | Ok program ->
-                CollectionAssert.AreEqual([| 21; 3; 11; 24 |], program.cells)
-                CollectionAssert.AreEqual([| "mother"; "x" |], program.symbols)
-                Assert.AreEqual(1, program.clauses.Count)
+                printProgram program
+                CollectionAssert.AreEqual([| 29; 3; 11; 24; 42; 13; 19; 25 |], program.cells)
+                CollectionAssert.AreEqual([| "mother"; "x"; "s" |], program.symbols)
+                Assert.AreEqual(2, program.clauses.Count)
 
                 CollectionAssert.AreEqual(
                     [| { addr = 0
@@ -154,7 +153,7 @@ type TestCompilerClass() =
                          neck = 3
                          hgs = [| 0 |]
                          xs = [||] } |],
-                    program.clauses["mother/2"]
+                    program.clauses["mother/3"]
                 )
             | Error error -> Assert.Fail $"should compile code correctly: {error.code}"
         | _ -> Assert.Fail "should parse code correctly"
